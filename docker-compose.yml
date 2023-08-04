@@ -1,0 +1,41 @@
+version: '3.7'
+services:
+  web:
+    build: .
+    ports:
+      - "8111:443"
+      - "8112:80"
+
+    environment:
+      - XDEBUG_ENABLED=0
+      - PORT=80
+      - LOCAL_DEV=1
+    volumes:
+      - ./app:/var/www/html
+      - ./secrets/oidc_client_config.conf:/secrets/oidc_client_config.conf
+      - ./secrets/_config_dev.php:/secrets2/_config.php
+      - ./secrets/som-rit-ourvoice-firestore.json:/secrets3/firestore_service_account.json
+      - ./secrets/oidc_client_config.conf:/var/www/html/secrets/oidc_client_config.conf
+      - ./secrets/_config_dev.php:/var/www/html/_config.php
+      - ./secrets/som-rit-ourvoice-firestore.json:/var/www/html/secrets3/firestore_service_account.json
+      # The following add support for SSL on localhost (see README for directions)
+      - ./secrets/cert.pem:/etc/apache2/ssl/cert.pem
+      - ./secrets/cert-key.pem:/etc/apache2/ssl/cert-key.pem
+      - ./secrets/rootCA.pem:/usr/local/share/ca-certificates/rootCA.crt
+      # below must be commented out for LOCAL_DEV=0
+      - ./vhost_ssl.conf:/etc/apache2/sites-enabled/vhost_ssl.conf
+      
+
+
+#  couchdb-local:
+#    image: couchdb:1.7.1
+#    volumes:
+#      - couchdb_dev_local:/usr/local/var/lib/couchdb
+#    environment:
+#      - "COUCHDB_USER=${COUCHDB_USER}"
+#      - "COUCHDB_PASSWORD=${COUCHDB_PASSWORD}"
+#    ports:
+#      - "15984:5984"
+#volumes:
+#  couchdb_dev_local:
+#    name: "couchdb_dev_local"

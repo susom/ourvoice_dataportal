@@ -1,0 +1,136 @@
+.photo_detail .user_entry{
+	width:auto;
+	border-radius:none;
+	box-shadow:none;
+	background:none;
+	border:1px solid #fff;
+	padding-bottom:80px;
+}
+.print_logo{
+	display:block;
+	-webkit-print-color-adjust: exact;
+}
+
+.photo_detail .user_entry hgroup{
+	page-break-after: avoid;
+	display:none;
+}
+
+.photobox{
+	display:inline-block;
+	width:100%;
+	page-break-before: avoid;
+	overflow:hidden;
+}
+
+.photo_detail .preview {
+    min-height: auto;
+}
+
+
+.photo_previews{
+	float:left;
+}
+
+.photo_detail .audio_clip{
+	border:none;
+	background:none;
+	padding-left:0
+}
+
+.photo_detail  figure img {
+    max-width: 570px;
+ }
+
+.photo_detail .rotate[rev='1'] img{
+	transform: rotate(90deg) translate(90px,70px);
+}
+/*.photo_detail .rotate[rev='3'] img{
+	transform: rotate(270deg) translate(-90px,-70px);
+}*/
+.photo_detail .rotate[rev='2'] img,
+.photo_detail .rotate[rev='0'] img {
+    max-width: 430px;
+ }
+
+
+.print_only {
+    display: block;
+    position: absolute;
+    width: 420px;
+    left: -205px;
+    top: 230px;
+    color: #999;
+    font-size: 10px;
+    font-style: normal;
+    transform: rotate(270deg);
+}
+
+a.preview span
+,audio
+,.photo_detail input[type='submit']
+,.prev
+,.next
+,.download{
+	display:none;
+}
+
+section,
+section.side{
+	float:none;
+}
+
+textarea{
+	border:none;
+}
+
+@media print {
+	.page-break	{ display: block; page-break-before: always; }
+	.photo_detail textarea{
+		display:none;
+	}
+	
+	.user_entry h4 {
+		font-size:150%;
+	}
+
+	#confidence_exerpt{
+		display:none;
+	}
+
+	.forprint{
+		display:block;
+		font-size:125%;
+	}
+
+	#tags ul.photopage {
+	    float: none;
+	    width: auto;
+	}
+	#tags ul li {
+	    margin: 0 5px 10px;
+	    padding:initial; 
+	    background: none; 
+	    border-radius: initial; 
+	    position: initial; 
+	}
+	#tags .noback,
+	#tags .deletetag{
+		display:none;
+	}
+
+	
+}
+
+@media print and (orientation: portrait) {
+    /* Your code for portrait orientation */
+	.photo_detail figure img {
+    	max-width: 300px;
+    }
+}
+@media print and (orientation: landscape) {
+    /* Your code for portrait landscape */
+	.photo_detail figure img {
+    	max-height: 600px;
+    }
+}

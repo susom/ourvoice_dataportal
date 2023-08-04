@@ -1,0 +1,43 @@
+# Dependency directories
+node_modules/
+
+# System Files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE/Editor Files
+.idea/
+.vscode/
+*.swp
+
+# Build/output directories
+build/
+*.out
+*.class
+*.log
+
+# Environment variables and configuration files
+*.env
+config.js
+config.json
+
+# Database Files
+*.sqlite
+*.sql
+*.db
+
+# Log and Trace Files
+*.log
+
+*.jar
+*.war
+*.class
+
+# PHP
+composer.phar
+composer.lock
+
+# OS generated files
+Thumbs.db
+
