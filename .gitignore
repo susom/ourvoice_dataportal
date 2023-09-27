@@ -42,3 +42,5 @@ composer.lock
 Thumbs.db
 
 secrets
+app/secrets
+app/secrets3
