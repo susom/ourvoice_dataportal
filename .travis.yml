@@ -4,7 +4,7 @@ env:
     - CLOUD_RUN_REGION=us-west1
     - CLOUDSDK_CORE_DISABLE_PROMPTS=1   # prevent gcloud from prompting
 before_install:
-  - openssl aes-256-cbc -K $encrypted_718419ccb126_key -iv $encrypted_718419ccb126_iv -in som-rit-ourvoice.json.enc -out som-rit-ourvoice.json -d
+  - openssl aes-256-cbc -K $encrypted_eaf331f24b94_key -iv $encrypted_eaf331f24b94_iv -in som-rit-ourvoice-travis-deploy.json.enc -out som-rit-ourvoice-travis-deploy.json -d
   - gcloud auth activate-service-account --key-file=som-rit-ourvoice.json
   - gcloud auth configure-docker        # enable "docker push" to gcr
   - gcloud config set project "som-rit-ourvoice"

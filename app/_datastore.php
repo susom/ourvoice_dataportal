@@ -41,7 +41,7 @@ class Datastore {
                                 cfg::$imgkit_url
                             );
     }
-
+    
     public function doCurl($url, $data = null, $method = "GET", $username = null, $password = null) {
         $process = curl_init($url);
         if($this->firestore){
@@ -237,7 +237,7 @@ class Datastore {
                     $fs_pw = $data["project_pass"];
                     $su_pw = $data["summ_pass"];
 
-                    if ($fs_pw == $project_pass || $su_pw == $project_pass || $project_pass == cfg::$master_pw ||$project_pass == "annban") {
+                    if ($fs_pw == $project_pass || $su_pw == $project_pass || $project_pass == cfg::$master_pw ) {
                         foreach($data as $key => $val){
                             $result[$key] = $val;
                         }
@@ -690,7 +690,6 @@ class Datastore {
             $midnight_plus  = $midnight + 86400000;
             $ov_walks       = $this->firestore->collection($this->walks_collection);
 
-            //TODO NEED AWAY TO QUERY BOTH INTERGER AND STRING FUCKING TIMESTAMPS
             $query          = $ov_walks->where('project_id', '=', $project_code)
                 ->where('timestamp', '>=', $midnight)
                 ->where('timestamp', '<', $midnight_plus);
@@ -719,8 +718,6 @@ class Datastore {
 //                array_push($result, $walk_data);
             }
 
-            //TODO THIS IS FUCKED UP, BOTH BLOCKS EXACTLY THE SAME EXCEPT FOR THE STRVAL()
-            //FUCK THIS SHIT FUCK THIS SHIT FUCK IT! SOEM TIMESTAMPS ARE INT SOME ARE STRINGS WHAT THEFUCK MAN
             $midnight       = strval($midnight);
             $midnight_plus  = strval($midnight_plus);
             $query          = $ov_walks->where('project_id', '=', $project_code)
@@ -853,7 +850,6 @@ class Datastore {
         $photo_geos     = array();
         $code_block     = array();
 
-        //WHAT THE FUCK IS THIS SHIT, NEED TO LOOP THROUGH 3 times? 
         $sort_temp      = array();
         if(!empty($response)){
             $_id    = $walk_id;
@@ -924,7 +920,6 @@ class Datastore {
         $photo_geos     = array();
         $code_block     = array();
 
-        //WHAT THE FUCK IS THIS SHIT, NEED TO LOOP THROUGH 3 times?
         $sort_temp      = array();
         foreach($response as $doc){
             $_id        = $doc["id"];
@@ -948,7 +943,6 @@ class Datastore {
             return $timestampB <=> $timestampA;
         });
 
-        //SECOND LOOP!  + BONUS NESTED LOOP BS,   BETTER WAY TO DO THIS???  FUCK IT.
         foreach($sort_temp as $_id => $photos){
             foreach($photos as $photo){
                 // GATHER EVERY GEO TAG FOR EVERY PHOTO IN THIS WALK, AT LEAST THIS HAS NO ORDER HALLELUJAH
@@ -1071,22 +1065,19 @@ class Datastore {
         }
     }
 
+
     public function getStorageFile($google_bucket, $id_string , $file_name, $image_transform=array()){
         $temp       = explode("_", $id_string);
         $pcode      = $temp[0];
         $uuid       = $temp[1];
         $walk_ts    = $temp[2];
-
-        //once fix pixelation, need to "purge cache"
-        /*
-         $this->imageKit->purgeCacheApi(array(
-                                            "url" => "https://ik.imagekit.io/your_imagekit_id/default-image.jpg"
-                                        ));
-        */
+        $time       = time();
+//        $base   = $this->imageKit->url(['path' => "/$pcode/$uuid/$walk_ts/$file_name"]);
+//        $this->purgeCache(cfg::$gcp_bucketName, $base);
 
         if(!empty($image_transform)){
             //for image kit CDN photos only
-            $file_uri   = "/$pcode/$uuid/$walk_ts/$file_name";
+            $file_uri   = "/$pcode/$uuid/$walk_ts/$file_name?ignoreCache=1&time=$time";
             $transform  = array();
             $transform["width"] = '1.0';
             $transform["c"]     = 'maintain_ratio';
@@ -1147,9 +1138,7 @@ class Datastore {
             );
             return $imageURL;
         }else{
-            //for audio/mp3/rawphotos
-            $file_uri   = "https://storage.googleapis.com/$google_bucket/$pcode/$uuid/$walk_ts/$file_name";
-            return $file_uri;
+           return "https://storage.googleapis.com/$google_bucket/$pcode/$uuid/$walk_ts/$file_name?ignoreCache=1&time=time()";
         }
     }
 
@@ -1182,8 +1171,6 @@ class Datastore {
             $nowtime        = time()*1000;
             $nowtime_minus  = $nowtime - ($days*86400000);
 
-
-            //TODO HERE TOO? FUCK THIS SHIT
             $ov_walks       = $this->firestore->collection($this->walks_collection);
             $query          = $ov_walks
                 ->where('timestamp', '>', $nowtime_minus)
@@ -1210,7 +1197,6 @@ class Datastore {
                 }
             }
 
-            //TODO THIS IS SOME FUCKING BULLSHIT, BUT I DONT HAVE ONE FUCKING DAY OF TIME WITHOUT BEING PESTERED WITH URGENT DEMANDS TO ADDRESS IT SO FUCK IT !
             $nowtime        = strval($nowtime);
             $nowtime_minus  = strval($nowtime_minus);
             $query          = $ov_walks
@@ -1655,6 +1641,28 @@ class Datastore {
 
         //UPLOAD from TEMP DIR on DISK
         $uploaded           = $this->upload_object($storageCLient, $bucketName, $new_attach_id, $filepath);
+
+        return $uploaded;
+    }
+
+    public function uploadPixelation($attach_id, $walk_id, $bucketName, $storageClient, $filepath=false){
+        # UPLOAD TO CLOUD STORAGE
+        $folder_components  = explode("_",$walk_id);
+
+        $project_id         = $folder_components[0];
+        $device_id          = $folder_components[1];
+        $walk_ts            = $folder_components[2];
+        $attachment_prefix  = "$project_id/$device_id/$walk_ts/";
+        $file_suffix        = str_replace($walk_id."_","",$attach_id);
+
+        $file_suffix        = str_replace("jpeg", "jpg", $file_suffix);
+
+        $filepath           = !$filepath ? 'temp/'.$walk_id.'/'.$attach_id : $filepath;
+//        $new_attach_id      = $attachment_prefix . $file_suffix;
+        $new_attach_id      = $attachment_prefix . $file_suffix;
+
+        //UPLOAD from TEMP DIR on DISK
+        $uploaded           = $this->upload_object($storageClient, $bucketName, $new_attach_id, $filepath);
 
         return $uploaded;
     }

@@ -1,8 +1,11 @@
 <?php
 require_once "common.php";
+use Google\Cloud\Storage\StorageClient;
 
+error_log("Entering AJAX handler");
 $action = filter_var($_POST["action"], FILTER_SANITIZE_STRING);
 if(!empty($_POST["action"])){
+    error_log("Action received: " . $action);
     // POSSIBLE POST VARS COMING IN
     $_id        = !empty($_POST["doc_id"])      ? filter_var($_POST["doc_id"], FILTER_SANITIZE_STRING) : null;
     $url        = !empty($_POST["url"])         ? filter_var($_POST["url"], FILTER_SANITIZE_ENCODED) :null;
@@ -385,11 +388,8 @@ if(!empty($_POST["action"])){
             $url            = cfg::$couch_url . "/" . cfg::$couch_users_db . "/" . $pic_reference;
             $response       = $ds->doCurl($url);
             $storage 		= json_decode($response,1);
-            //print_r($storage);
 
             $present_flag = false;
-            //print_r($pic_number);
-            //print_r($storage["photos"]);
             $tag_loc = $storage["photos"][$pic_number]["tags"];
             if(isset($tag_loc)){
                 echo "exisdt";
@@ -415,55 +415,71 @@ if(!empty($_POST["action"])){
         break;
 
         case 'pixelation':
-            if(isset($_POST["pic_id"]) && isset($_POST['photo_num'])&& isset($_POST['coordinates'])){
-                $face_coord 	= json_decode(filter_var($_POST["coordinates"], FILTER_SANITIZE_STRING),1);
+            try{
+                error_log("Entering case 'pixelation'");
+                if(!isset($_POST["pic_id"]) || !isset($_POST['photo_num']) || !isset($_POST['coordinates'])) {
+                    throw new Exception('Incorrect payload passed');
+                }
+
+                $coordinates_unfiltered = json_decode($_POST['coordinates']);
+                $face_coordinates = array();
+
+                foreach($coordinates_unfiltered as $key=>$value) {
+                    $face_coordinates[$key] = filter_var($value, FILTER_SANITIZE_STRING);
+                }
+
                 $_id 			= filter_var($_POST["pic_id"], FILTER_SANITIZE_STRING);
                 $photo_num 		= filter_var($_POST["photo_num"], FILTER_SANITIZE_NUMBER_INT);
                 $rotationOffset = filter_var($_POST["rotation"], FILTER_SANITIZE_NUMBER_INT);
                 $photo_num 		= 'photo_'.$photo_num . '.jpg';
                 $id 			= $_id."_".$photo_num;
 
-                //find rev by curling to couch
-                $url 			= cfg::$couch_url . "/". cfg::$couch_attach_db . "/" .$id;
-                $result 		= $ds->doCurl($url);
-                $result 		= json_decode($result,1);
-                $rev 			= ($result['_rev']);
 
-                //find the offset so canvas can be specified for each image based on portal rotation
-                // $rOffset = findRotationOffset(cfg::$couch_url . "/" . cfg::$couch_users_db . "/" . $id);
-                // 0 = none, 1 = base, 2 = 90 degree rotation
+                $photo_uri     = $ds->getStorageFile(cfg::$gcp_bucketName, $_id, $photo_num);
+                $new 			= imagecreatefromstring(file_get_contents($photo_uri)); //set the actual picture for editing
+                $pixel_count 	= imagesx($new)* imagesy($new);
+                $altered_image 	= filterFaces($face_coordinates, $new, $_id, $pixel_count, $rotationOffset);
 
-                $picture 		= $ds->doCurl($url . '/' . $photo_num); //returns the actual image in string format
-                $new 			= imagecreatefromstring($picture); //set the actual picture for editing
-                $pixel_count 	= (imagesx($new)*imagesy($new)); //scale pixel to % image size
-                $altered_image 	= filterFaces($face_coord, $new, $_id, $pixel_count, $rotationOffset);
                 if(isset($altered_image) && $altered_image){
                     $filepath = "./temp/$_id.jpg";
-                    if(file_exists($filepath)){
-                        unlink("./temp/$_id.jpg");
-                    }
+                    if(!is_dir("./temp"))
+                        mkdir("./temp");
 
-                    // if(file_exists($filepath))
-                    // 	unset($filepath);
+                    if (file_exists($filepath))
+                        unlink("./temp/$_id.jpg");
 
                     imagejpeg($altered_image, $filepath); //save it
                     imagedestroy($altered_image);
-                    $content_type   = 'image/jpeg';
-                    $attach_url 	= cfg::$couch_url . "/" . cfg::$couch_attach_db;
-                    $couchurl       = $attach_url."/".$id."/".$photo_num."?rev=".$rev;
-                    $content_type   = 'image/jpeg';
-                    $response       = $ds->uploadAttach($couchurl, $filepath, $content_type);
 
-                    $storageCLient = new StorageClient([
-                        'keyFilePath'   => $keyPath,
-                        'projectId'     => $gcp_project_id
+                    $storageClient = new StorageClient([
+                        'keyFilePath'   => cfg::$FireStorekeyPath,
+                        'projectId'     => cfg::$gcp_bucketID
                     ]);
 
                     //UPLOAD TO GOOGLE BUCKET
-                    $uploaded   	= $ds->uploadCloudStorage($id ,$_id , $gcp_bucketName, $storageCLient,  $filepath);
-                    //refresh page
+                    $uploaded   	= $ds->uploadPixelation($id ,$_id , cfg::$gcp_bucketName, $storageClient,  $filepath);
+                    if(isset($uploaded)){
+                        $return = array(
+                            'status' => 200,
+                            'message' => "Pixelation Successful."
+                        );
+                        http_response_code(200);
+                    } else {
+                        error_log("Pixelation Unsuccessful: uploaded not set");
+                        $return = array(
+                            'status' => 400,
+                            'message' => "Pixelation Unsuccessful."
+                        );
+                        http_response_code(400);
+                    }
+                    print_r(json_encode($return));
                 }
+            } catch (exception $e) {
+                error_log('Caught exception in pixelation: ' .  $e->getMessage());
+                http_response_code(500);
+                echo json_encode(['status' => 500, 'message' => $e->getMessage()]);
             }
+
         break;
 
         case "delete_project_id":
@@ -566,7 +582,6 @@ if(!empty($_POST["action"])){
         break;
 
         case "archive":
-            // due to unfreshness of SESSION multiple people saving and shit, we need to pull fresh version before pushing back up
             $url 		= cfg::$couch_url . "/" . cfg::$couch_proj_db . "/" . cfg::$couch_config_db;
             $response 	= $ds->doCurl($url);
             $payload 	= $_SESSION["DT"] = json_decode($response,1);
@@ -590,6 +605,7 @@ if(!empty($_POST["action"])){
     if($ajax_resp) {
         print_r($response);
     }
-}else{
+}else {
+    error_log("Exiting AJAX handler with error: action not set");
     echo json_encode(array("error" => "something went wrong"));
 }

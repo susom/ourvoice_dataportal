@@ -11,7 +11,7 @@ class base_cfg {
     public static $couch_all_db         ='_all_docs';
     public static $couch_user            ='disc_user_general';
     public static $couch_pw             ="rQaKibbDx7rP";
-    public static $gmaps_key            ="abc";
+    public static $gmaps_key            ="AIzaSyCn-w3xVV38nZZcuRtrjrgy4MUAW35iBOo";
 }
 
 

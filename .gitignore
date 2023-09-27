@@ -41,3 +41,4 @@ composer.lock
 # OS generated files
 Thumbs.db
 
+secrets

@@ -39,8 +39,21 @@ $page = "photo_detail";
 				$_SESSION["DT"]["project_list"][$proj_idx]["tags"] = array();
 			}
 
-            $walk_bounding_geos = json_encode($doc["bounding_geos"]);
-
+            //need for forward compatability?
+            $bounding_geos = [];
+            $count = 1;
+            foreach ($doc["bounding_geos"] as $item) {
+                if(isset($item["lat"])){
+                    $bounding_geos[$count] = [
+                        "geotag" => [
+                            "latitude" => $item["lat"],
+                            "longitude" => $item["lng"]
+                        ]
+                    ];
+                    $count++;
+                }
+            }
+            $walk_bounding_geos = json_encode($bounding_geos);
 
             $photo 		= $doc["photo"];
 			$device 	= $doc["device"]["platform"] ?? null;
@@ -74,7 +87,7 @@ $page = "photo_detail";
 	        $timestamp = $long = $lat = "";
             list($project_id, $device_uuid, $walk_timestamp) = explode("_", $_id);
 
-			if(array_key_exists("geotag", $photo)){
+			if(array_key_exists("geotag", $photo) && !empty($photo["geotag"])){
 	            $long 		= isset($photo["geotag"]["lng"])?  $photo["geotag"]["lng"] : $photo["geotag"]["longitude"];
 	            $lat 		= isset($photo["geotag"]["lat"]) ? $photo["geotag"]["lat"] : $photo["geotag"]["latitude"];
 	            $timestamp  = array_key_exists("timestamp", $photo["geotag"]) ? $photo["geotag"]["timestamp"] :  $walk_timestamp;
@@ -206,9 +219,9 @@ $page = "photo_detail";
 			echo 	"</section>";
 
 			echo "<section class='side'>";
-			echo "<button type = 'button' id = 'pixelateSubmit' class = 'hidden' style='float:right'>Submit</button>";
-			echo "<button type = 'button' id = 'pixelate' style='float:right'>Select Area for Pixelation</button>";
-
+			echo "<button type = 'button' id = 'pixelateSubmit' data-loading class = 'btn btn-success hidden' style='float:right'>Submit</button>";
+			echo "<button type = 'button' id = 'pixelate' class='btn btn-primary' style='float:right'>Select Area for Pixelation</button>";
+            echo "<div id='pixelateLoading' class='alert alert-info hidden' role='alert'>Submitting pixelation... your page will automatically refresh</div>";
 			echo "<aside>
 					<b id = 'lat' value = '$lat'>lat: $lat</b>
 					<b id = 'long' value = '$long'>long: $long</b>
@@ -252,9 +265,9 @@ $page = "photo_detail";
 </div>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/autosize.js/3.0.20/autosize.js"></script>
 <script src="https://code.jquery.com/jquery-3.2.1.min.js" integrity="sha256-hwg4gsxgFZhOsEEamdOYGBf13FyQuiTwlAQgxVSNgt4=" crossorigin="anonymous"></script>
-<script type="text/javascript" src="https://maps.google.com/maps/api/js?key=<?php echo cfg::$gmaps_key; ?>"></script>
-<script src="js/jquery-ui.js"></script>
 <script type="text/javascript" src="js/dt_summary.js?v=<?php echo time();?>"></script>
+<script type="text/javascript" src="https://maps.google.com/maps/api/js?key=<?php echo cfg::$gmaps_key; ?>&callback=emtpy_cb"></script>
+<script src="js/jquery-ui.js"></script>
 <script>
 var ajax_handler = "ajaxHandler.php";
 function addmarker(latilongi,map_id) {
@@ -310,6 +323,93 @@ function saveTag(doc_id,photo_i,tagtxt,proj_idx){
 	return;
 }
 
+function bindPixleationEvents(){
+    var doc_id 	= $(".preview span").parent().data("doc_id"); //AFUM23894572093482093.. etc
+    var photo_i = $(".preview span").parent().data("photo_i"); //Photo1.jpg
+    var rotationOffset = $(".preview").attr("rev"); // rotation
+    drawPixelation(doc_id, photo_i, rotationOffset);
+
+}
+
+function drawPixelation(doc_id = 0, photo_i = 0, rotationOffset){
+    let canvas = $(".covering_canvas")[0];
+    let ctx = canvas.getContext('2d');
+    let canvasx = $(canvas).offset().left;
+    let canvasy = $(canvas).offset().top;
+    let last_mousex = last_mousey = 0;
+    let mousex = mousey = 0;
+    let mousedown = false;
+    let coord_array = {};
+    let data = {};
+    let scrollOffset = 0; //necessary for scaling pixels from top of page for Y coordinate
+
+    $("#pixelateSubmit").on("click",function(){
+        if(!jQuery.isEmptyObject(data)){
+            if(confirm('Are you sure you want to pixelate this area? This action cannot be undone.')){
+                $(this).addClass("disabled hidden");
+                $('#pixelate').addClass("disabled hidden");
+                $('#pixelateLoading').removeClass("hidden");
+                $.ajax({
+                    method: "POST",
+                    url: ajax_handler,
+                    data: {
+                        pic_id: doc_id,
+                        photo_num: photo_i,
+                        coordinates: data,
+                        rotation: rotationOffset,
+                        action: "pixelation"
+                    }
+                })
+                .done(res => {
+                    console.log(res);
+                    window.location.reload();
+                })
+                .fail((e) => {
+                    console.log('failed', e)
+                    $('#pixelateLoading').text('Something went wrong, pixelation failed')
+                });
+            }
+        }
+    })
+
+
+    $(".covering_canvas").on("mousedown", function(e){
+        scrollOffset = window.scrollY;
+        last_mousex = parseInt(e.clientX-canvasx);
+        last_mousey = parseInt(e.clientY-canvasy+scrollOffset);
+        mousedown = true;
+    });
+
+    $(canvas).on('mouseup', function(e) {
+        mousedown = false;
+        coord_array.width = (mousex-last_mousex);
+        coord_array.height = (mousey-last_mousey);
+        coord_array.x = last_mousex;
+        coord_array.y = last_mousey;
+        coord_array.width_pic = $("#main_photo")[0].getBoundingClientRect().width;;
+        coord_array.height_pic = $("#main_photo")[0].getBoundingClientRect().height;;
+        if(coord_array.width && coord_array.height){
+            data = JSON.stringify(coord_array);
+        }
+    });
+
+    $(canvas).on('mousemove', function(e) {
+        scrollOffset = window.scrollY;
+        mousex = parseInt(e.clientX-canvasx);
+        mousey = parseInt(e.clientY-canvasy+scrollOffset);
+        if(mousedown) {
+            ctx.clearRect(0,0,canvas.width,canvas.height); //clear canvas
+            ctx.beginPath();
+            var width = mousex-last_mousex;
+            var height = mousey-last_mousey;
+            ctx.rect(last_mousex,last_mousey,width,height);
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+    });
+}
+
 $(document).ready(function(){
 	<?php
 		echo implode($gmaps);
@@ -321,23 +421,32 @@ $(document).ready(function(){
 	}
 
 	$("#pixelate").on("click", function(){
-		var doc_id 	= $(".preview span").parent().data("doc_id"); //AFUM23894572093482093.. etc
-		var photo_i = $(".preview span").parent().data("photo_i"); //Photo1.jpg
-		var rotationOffset = $(".preview").attr("rev"); // rotation
+		let doc_id 	= $(".preview span").parent().data("doc_id"); //AFUM23894572093482093.. etc
+		let photo_i = $(".preview span").parent().data("photo_i"); //Photo1.jpg
+		let rotationOffset = $(".preview").attr("rev"); // rotation
+        let canvas = $(".covering_canvas")[0];
+        let width_pic = $("#main_photo")[0].getBoundingClientRect().width;
+        let height_pic = $("#main_photo")[0].getBoundingClientRect().height;
 
-		console.log(rotationOffset);
-		$("#pixelateSubmit").off(); //on reclick, turn off events
-		$(".covering_canvas").off();
-		if($("#pixelate").css("background-color") == 'rgb(255, 0, 0)'){
-			$("#pixelate").css("background-color","#4CAF50");
-			$(".covering_canvas").css("cursor", "");
-			$("#pixelateSubmit").addClass("hidden");
-		}else{
-			$("#pixelate").css("background-color","red");
-			$("#pixelateSubmit").removeClass("hidden");
-			drawPixelation(doc_id, photo_i,rotationOffset);		
-		}
+        setCanvas(canvas, rotationOffset, width_pic, height_pic);
 
+        if($(this).hasClass("btn-primary")) { //Clicked pixelate
+            $(this).removeClass("btn-primary")
+                .addClass("btn-danger")
+                .text("Cancel");
+            $("#pixelateSubmit")
+                .off()
+                .removeClass("hidden");
+            drawPixelation(doc_id, photo_i,rotationOffset);
+        } else {
+            $(this).removeClass("btn-danger")
+                .addClass("btn-primary")
+                .text("Select Area for Pixelation");
+            $("#pixelateSubmit").addClass("hidden");
+            $(".covering_canvas")
+                .off()
+                .css("cursor", "");
+        }
 	});
 
 	window.snd_o           = null;
@@ -384,7 +493,7 @@ $(document).ready(function(){
 		}).done(function( msg ) {
 			// alert( "Data Saved: " + msg );
 		});
-		
+
 		return false;
 	});
 
@@ -395,7 +504,7 @@ $(document).ready(function(){
 		var doc_id 	= $(this).data("doc_id");
 		var photo_i = $(this).data("photo_i");
 		var tagtxt 	= $(this).data("deletetag");
-		
+
 		var _this 	= $(this);
 		$.ajax({
 			method: "POST",
@@ -408,7 +517,7 @@ $(document).ready(function(){
 		});
 		return false;
 	});
-	
+
 	$("#newtag").on("click",".tagphoto",function(){
 		// get the tag index/photo index
 		var doc_id 	= $(this).data("doc_id");
@@ -430,7 +539,7 @@ $(document).ready(function(){
 
 		if(tagtxt){
 			$("#newtag_txt").val("");
-			
+
 			// add tag to project's tags and update disc_project
 			// ADD new tag to UI
 			saveTag(doc_id,photo_i,tagtxt,proj_idx);
@@ -446,7 +555,7 @@ $(document).ready(function(){
 	$(".opentag").click(function(){
 		//opens up the tag picker modal
 		$("#newtag").fadeIn("fast");
-	
+
 		return false;
 	});
 
@@ -489,92 +598,11 @@ $(document).ready(function(){
     });
 });
 
-function drawPixelation(doc_id = 0, photo_i = 0, rotationOffset){
-	var canvas = $(".covering_canvas")[0];
-	var width_pic = $("#main_photo")[0].getBoundingClientRect().width;
-	var height_pic = $("#main_photo")[0].getBoundingClientRect().height;
-	setCanvas(canvas, rotationOffset, width_pic, height_pic);
-	//css and pixel count set
-	
-	var ctx = canvas.getContext('2d');
-	var canvasx = $(canvas).offset().left;
-	var canvasy = $(canvas).offset().top;
-	var last_mousex = last_mousey = 0;
-	var mousex = mousey = 0;
-	var mousedown = false;
-	var coord_array = {};
-	var data = {};
-	var scrollOffset = 0; //necessary for scaling pixels from top of page for Y coordinate
-
-	$("#pixelateSubmit").on("click",function(){
-			if(confirm('Are you sure you want to pixelate this area? This action cannot be undone.')){
-				$.ajax({
-			 		method: "POST",
-			  	 	url: ajax_handler,
-			  	 	data: { pic_id: doc_id, photo_num: photo_i, coordinates: data, rotation: rotationOffset, action:"pixelation"},
-			  	 	success:function(response){
-			  	 		console.log(response);
-			  			window.location.reload(true);
-			 	 	}
-				});
-				$("#pixelate").css("background-color", "#4CAF50"); //change color back to reg
-				ctx.clearRect(0,0,canvas.width,canvas.height); //clear rect
-				data = {};
-				$(canvas).off();	//turn off events 
-				$(".covering_canvas").css("cursor", "");
-				$("#pixelateSubmit").addClass("hidden");
-			}
-
-	});
-
-	$(".covering_canvas").on("mousedown", function(e){
-		console.log(scrollOffset);
-		scrollOffset = window.scrollY;
-		last_mousex = parseInt(e.clientX-canvasx);
-		last_mousey = parseInt(e.clientY-canvasy+scrollOffset);
-		mousedown = true; 
-	});
-
-	$(canvas).on('mouseup', function(e) {
-			mousedown = false;
-			coord_array.width = (mousex-last_mousex);
-			coord_array.height = (mousey-last_mousey);
-			coord_array.x = last_mousex;
-			coord_array.y = last_mousey;
-			coord_array.width_pic = width_pic;
-			coord_array.height_pic = height_pic;
-			if(coord_array.width && coord_array.height){ 
-				data = JSON.stringify(coord_array);
-			}
-	});
-
-	$(canvas).on('mousemove', function(e) {
-		scrollOffset = window.scrollY;
-	    mousex = parseInt(e.clientX-canvasx);
-		mousey = parseInt(e.clientY-canvasy+scrollOffset);
-	    if(mousedown) {
-	        ctx.clearRect(0,0,canvas.width,canvas.height); //clear canvas
-	        ctx.beginPath();
-	        var width = mousex-last_mousex;
-	        var height = mousey-last_mousey;
-	        ctx.rect(last_mousex,last_mousey,width,height);
-	        ctx.strokeStyle = 'red';
-	        ctx.lineWidth = 2;
-	        ctx.stroke();
-    	}
-	});
-}
-
 function setCanvas(canvas, rotationOffset, width_pic, height_pic){
-	// $(".covering_canvas").css("width",width_pic).css("height", height_pic);
 	$(".covering_canvas").css("cursor", "crosshair");
 
-	//set the canvas for drawing to be the same dimensions as the photo
 	canvas.width = width_pic;
 	canvas.height = height_pic;
-	canvas.style.position = "relative";
-	$(".covering_canvas").css("left",$("#main_photo").position().left);
-	$(".covering_canvas").css("top",$("#main_photo").position().top);
 
 	switch(rotationOffset){
 		case 0,1,3: 

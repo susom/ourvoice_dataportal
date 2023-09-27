@@ -221,6 +221,7 @@ function deleteDirectory($dir) {
 function printRow($doc, $i){
     global $project_meta, $ap, $ds;
 
+    $last4          = substr($doc["_id"],-4);
     $pcode          = $doc["project_id"];
     $codeblock      = array();
 
@@ -237,9 +238,27 @@ function printRow($doc, $i){
     if (empty($geotags)){
         foreach($photos as $photo){
             if(!empty($photo["geotag"])){
-                $geotags[] = $photo["geotag"];
+                $geotags[] = array("geotag" => $photo["geotag"]);
                 break;
             }
+        }
+    }else{
+        $check_structure = current($geotags);
+        //NEED A UNIFORM STRUCTURE BETWEEN OLD CORDOVA APP AND NEW PWA APP DATA
+        if(!array_key_exists("geotag", $check_structure)){
+            $geotags = array_map(function($element) {
+                $newElement = ['geotag' => []];
+                foreach ($element as $key => $value) {
+                    if ($key === 'lat') {
+                        $newElement['geotag']['latitude'] = $value;
+                    } elseif ($key === 'lng') {
+                        $newElement['geotag']['longitude'] = $value;
+                    } else {
+                        $newElement['geotag'][$key] = $value;
+                    }
+                }
+                return $newElement;
+            }, $geotags);
         }
     }
 
@@ -260,27 +279,47 @@ function printRow($doc, $i){
     // get STATIC google map , performance, there a limite to how many markers can be passed to static api (_GET) so figure out how much to spread out the points
     $geopoints      = array();
     $point_count    = count($forjsongeo);
+
     $n_jump         = $point_count > 500 ? ceil($point_count/500) : 1;  //500 is about the max 
     $n              = 0;
     $path_coords    = array();
+
+    // Reset keys to be zero-based
+    $originalArray = array_values($forjsongeo);
+
+    // Re-index to start from 1
+    $forjsongeo = [];
+    foreach ($originalArray as $index => $value) {
+        $forjsongeo[$index + 1] = $value;
+    }
+
     foreach($forjsongeo as $geotag){
         if(isset($geotag["geotag"])){
-            $geotag = $geotag["geotag"];
-        }
 
-        $coord = $geotag["lat"].",".$geotag["lng"];
-        if($n%$n_jump == 0){
-            $path_coords[] = $coord;
+            $geotag = $geotag["geotag"];
+            $coord  = null;
+
+            if (isset($geotag['latitude']) && isset($geotag['longitude'])) {
+                $coord = $geotag['latitude'] . "," . $geotag['longitude'];
+            } elseif (isset($geotag['lat']) && isset($geotag['lng'])) {
+                $coord = $geotag['lat'] . "," . $geotag['lng'];
+            }
+
+            if($coord){
+                if($n%$n_jump == 0){
+                    $path_coords[] = $coord;
+                }
+                $geopoints[] = $coord;
+                $n++;
+            }
         }
-        $geopoints[] = $coord;
-        $n++;
     }
+
+
     $spread         = implode("|",$path_coords);
     $mapurl         = 'https://maps.googleapis.com/maps/api/staticmap?key='.cfg::$gmaps_key.'&size=420x300&zoom=16&path=color:0x0000FFd7|weight:3|' . $spread;
+    $json_geo       = json_encode($forjsongeo);
 
-    $json_geo    = json_encode($forjsongeo);
-
-    $last4       = substr($doc["_id"],-4);
     $firstpart   = substr($doc["_id"],0, strlen($doc["_id"]) - 4);
     $walk_ts_sub = substr($doc["_id"],-13);
     $date_ts     = date("F j, Y", floor($walk_ts_sub/1000)) ;
@@ -292,8 +331,9 @@ function printRow($doc, $i){
     <i><strong>$last4</strong></i></h4>";
     $codeblock[] = "</hgroup>";
 
-    $codeblock[] = "<div id='google_map_$i' class='gmap'><img src='$mapurl'/><a href='#' class='reload_map' data-mapgeo='$json_geo' data-mapi='$i'>Map look wrong?  Refresh with live map</a></div>";
-    $codeblock[] = "<div class = 'location_alert_summary'></div>";
+//    $codeblock[] = "<div data-mapid='$i' class = 'gmap summary location_alert'></div>";
+    $codeblock[] = "<div id='google_map_{$last4}' class='gmap'><img src='$mapurl'/><a href='#' class='reload_map' data-mapgeo='$json_geo' data-mapi='$i' data-walkid='$last4'>Map look wrong?  Refresh with live map</a></div>";
+    $codeblock[] = "<div data-walkid='$last4' class = 'location_alert_summary'></div>";
 
     
     $codeblock[] = "<section class='photo_previews'>";
@@ -315,6 +355,7 @@ function printRow($doc, $i){
     // $url_path    = $_SERVER['HTTP_ORIGIN'].dirname($_SERVER['PHP_SELF'])."/";
     $count_empty = 0;
 
+
     foreach($photos as $n => $photo){
 
         if(is_null($photo) || isset($photo["_deleted"])){
@@ -330,7 +371,10 @@ function printRow($doc, $i){
             $long   = 0;
             $lat    = 0;
         }
-        $timestamp  = isset($photo["geotag"]["timestamp"]) ? $photo["geotag"]["timestamp"] : 0;
+        $timestamp = isset($photo["geotag"]["timestamp"])
+            ? $photo["geotag"]["timestamp"]
+            : (isset($photo["timestamp"]) ? $photo["timestamp"] : $doc["timestamp"]);
+
         $goodbad    = "";
         if($photo["goodbad"] > 1){
             $goodbad  .= "<span class='goodbad good'></span>";
@@ -391,7 +435,7 @@ function printRow($doc, $i){
         </div>
 
         <figure>
-        <a href='$detail_url' rel='google_map_$i' data-photo_i=$n data-filename='$photo_name' data-doc_id='".$doc["_id"]."' data-long='$long' data-lat='$lat' class='preview rotate' rev='$rotate'><img src='$photo_uri' /><span></span><b></b></a>
+        <a href='$detail_url' rel='google_map_{$last4}' data-photo_i=$n data-filename='$photo_name' data-doc_id='".$doc["_id"]."' data-long='$long' data-lat='$lat' class='preview rotate' rev='$rotate'><img src='$photo_uri' /><span></span><b></b></a>
         <figcaption>
 
             <span class='time'>@".date("g:i a", floor($timestamp/1000))."</span>
@@ -810,7 +854,6 @@ function detectFaces($id, $old, $photo_name){
 }
 
 function filterFaces($vertices,$image,$id, $pixel_count, $rotationOffset = 0){
-    echo $pixel_count;
     $passed = false;
     if($rotationOffset){ //rotate back
         if($rotationOffset == 1){
@@ -879,11 +922,8 @@ function filterFaces($vertices,$image,$id, $pixel_count, $rotationOffset = 0){
 
     //save image locally
     if($passed){
-        echo 'yes';
         return $image;
-
     }else{
-        echo 'no';
         return false;
     }
 }

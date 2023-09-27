@@ -1,27 +1,49 @@
-function drawGMap(o_geotags, i_uniquemap, zoom_level, o_walk_geos){
-	var map_id         = "google_map_" + i_uniquemap;
-	var geotags        = o_geotags;
-	var walkMap        = [];
-    for(var i in geotags) {
-        var lat = geotags[i].hasOwnProperty("lat") ? geotags[i]["lat"] : geotags[i]["latitude"];
-        var lng = geotags[i].hasOwnProperty("lng") ? geotags[i]["lng"] : geotags[i]["longitude"];
-    	var ltlnpt     = new google.maps.LatLng(lat, lng);
-    	walkMap.push(ltlnpt);
-	}
+function drawGMap(o_geotags, walkid, zoom_level = 16, o_walk_geos) {
+    const map_id = "google_map_" + walkid;
+    const walkMap = [];
 
-    if(!zoom_level){
-        zoom_level = 16;
+    var geotags = o_geotags;
+
+    // Check if o_geotags is an object or array and iterate accordingly
+    if (Array.isArray(o_geotags)) {
+        for (let tag of o_geotags) {
+            let lat = tag.hasOwnProperty("lat") ? tag["lat"] : tag["latitude"];
+            let lng = tag.hasOwnProperty("lng") ? tag["lng"] : tag["longitude"];
+            if (!isNaN(lat) && !isNaN(lng)) {
+                walkMap.push(new google.maps.LatLng(lat, lng));
+            }
+        }
+    } else {
+        for (let key in o_geotags) {
+            let item = o_geotags[key];
+            let tag  = item["geotag"];
+
+            let lat = tag.hasOwnProperty("lat") ? tag["lat"] : tag["latitude"];
+            let lng = tag.hasOwnProperty("lng") ? tag["lng"] : tag["longitude"];
+            if (!isNaN(lat) && !isNaN(lng)) {
+                walkMap.push(new google.maps.LatLng(lat, lng));
+            }
+        }
     }
 
-	var myOptions = {
-	    zoom        : zoom_level,
-	    center      : walkMap[0],
-        scrollwheel : false,
-	    mapTypeId   : google.maps.MapTypeId.ROADMAP
-	}
-	// Create the map
+    // Ensure that walkMap has at least one valid LatLng object
+    if (walkMap.length === 0) {
+        console.error("No valid LatLng objects found.");
+        return;
+    }
+
+    const myOptions = {
+        zoom: zoom_level,
+        center: walkMap[0],
+        scrollwheel: false,
+        mapTypeId: google.maps.MapTypeId.ROADMAP,
+    };
+
+
+
+    // Create the map
 	window[map_id] = new google.maps.Map(document.getElementById(map_id), myOptions);
-	
+
     if(map_id != "google_map_photos"){
         new google.maps.Marker({
             map      : window[map_id],
@@ -81,7 +103,7 @@ function drawGMap(o_geotags, i_uniquemap, zoom_level, o_walk_geos){
             };
             gmarkers.push(marker);
     	}
-        
+
     	// Creates the polyline object (connecting the dots)
         var polyline = new google.maps.Polyline({
           map: window[map_id],
@@ -91,22 +113,43 @@ function drawGMap(o_geotags, i_uniquemap, zoom_level, o_walk_geos){
           strokeWeight: 0
         });
     }
+
     var LatLngBounds = new google.maps.LatLngBounds();
-    if(o_walk_geos){
-        for(var i in o_walk_geos) {
-            if(o_walk_geos[i]){
-                var ltlnpt = new google.maps.LatLng(o_walk_geos[i]["lat"], o_walk_geos[i]["lng"]);
+    var hasAdditionalGeos = false;  // New variable to track if there are additional geos
+
+    if (o_walk_geos && Object.keys(o_walk_geos).length) {
+        hasAdditionalGeos = true;
+        for (var i in o_walk_geos) {
+            if (o_walk_geos[i]) {
+                var geotag = o_walk_geos[i];
+                if (geotag.hasOwnProperty("geotag")) {
+                    geotag = geotag.geotag;
+                }
+                var lat = geotag.hasOwnProperty("lat") ? geotag["lat"] : geotag["latitude"];
+                var lng = geotag.hasOwnProperty("lng") ? geotag["lng"] : geotag["longitude"];
+                var ltlnpt = new google.maps.LatLng(lat, lng);
                 LatLngBounds.extend(ltlnpt);
             }
         }
-    }else{
-        for(var i in geotags) {
-            LatLngBounds.extend(walkMap[i]);
+    } else {
+        for (var i in geotags) {
+            var new_i = geotags.length == 1 ? 0 : i-1;
+            LatLngBounds.extend(walkMap[new_i]);
         }
     }
 
-    window[map_id].fitBounds(LatLngBounds); 
-    
+    if (hasAdditionalGeos) {
+        // Fit the map to these bounds if there are additional geos
+        window[map_id].fitBounds(LatLngBounds);
+    } else {
+        // Set the center and zoom manually if no additional geos
+        window[map_id].setCenter(walkMap[0]);
+        window[map_id].setZoom(zoom_level);
+    }
+
+
+    window[map_id].fitBounds(LatLngBounds);
+
 //NEW
      // infoWindow = new google.maps.InfoWindow();
     // var test = document.getElementById(map_id);
@@ -142,4 +185,9 @@ function drawGMap(o_geotags, i_uniquemap, zoom_level, o_walk_geos){
     // })    
 
 	return gmarkers;
+}
+
+//required callback for inline maps gapi usage
+function emtpy_cb() {
+    return;
 }

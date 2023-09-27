@@ -65,8 +65,8 @@ $page = "summary";
 <script src="js/jquery-3.3.1.min.js"></script>
 <script src="js/jquery-ui.js"></script>
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
-<script type="text/javascript" src="https://maps.google.com/maps/api/js?key=<?php echo cfg::$gmaps_key; ?>"></script>
 <script type="text/javascript" src="js/dt_summary.js?v=<?php echo time();?>"></script>
+<script type="text/javascript" src="https://maps.google.com/maps/api/js?key=<?php echo cfg::$gmaps_key; ?>&callback=emtpy_cb"></script>
 </head>
 <body id="main" class="<?php echo $page ?>">
 <div id="content">
@@ -95,11 +95,13 @@ $page = "summary";
 
         			//AUTOMATICALLY SHOW MOST RECENT DATE's DATA, AJAX THE REST
 //        			$response 	= $ds->filter_by_projid($active_project_id, $date);
+
                     $response 	= $ds->getWalksByIds($walk_ids);
         			foreach($response as $i => $row){
                         $doc = $row;
                         echo "<a name='".$doc["project_id"]."'></a>";
                         echo implode("",printRow($doc, $i));
+
                     }
         			echo "</div>";
         			echo "</aside>";
@@ -207,7 +209,7 @@ function checkLocationData(){
         if( $(this).data("mapgeo").length < 1 ){
             var cover = $(this).parent(".gmap").next(".location_alert_summary"); //closest cover for each summary 
             if(!cover.hasClass("cover_appended")){
-                cover.append("<p>Location data is missing on at least one walk photo. Please enable location services on future walks</p>");
+                cover.append("<p>Location data is missing. Please enable location services on future walks</p>");
                 cover.css("background-color","rgba(248,247,216,0.7)").css("text-align","center");
                 cover.css("z-index","2");
                 cover.addClass("cover_appended");
@@ -219,7 +221,7 @@ $(document).ready(function(){
     var ajax_handler = "ajaxHandler.php";
 	window.current_preview = null;
 	var timer;
-	// checkLocationData();
+	checkLocationData();
 	// bindHover();
 
 	$("#viewsumm").click(function(){
@@ -271,7 +273,6 @@ $(document).ready(function(){
 						$(this).remove() });
 				},1500);
 
-                console.log("wtf", response);
 				setTimeout(function(){
 					$(target).append(response);
 					$(".thumbs").find("li").unbind();
@@ -435,8 +436,17 @@ $(document).ready(function(){
 	//reload live map
 	$(".collapse").on("click",".reload_map",function(e){
 		var json_geo 	= $(this).data("mapgeo");
-		var i 			= $(this).data("mapi");
-		drawGMap(json_geo, i, 16);
+        var last4       = $(this).data("walkid");
+
+        if(Object.keys(json_geo).length){
+            drawGMap(json_geo, last4, 16);
+        }else{
+            //CHANGE MESSAGING?
+            if($(".location_alert_summary[data-walkid='"+last4+"'] p").length){
+                $(".location_alert_summary[data-walkid='"+last4+"'] p").html("Sorry, No further geodata was found. Please enable location services on future walks.");
+            }
+        }
+
 		return false;
 	});
 });

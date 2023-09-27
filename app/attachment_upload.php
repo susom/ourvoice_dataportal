@@ -3,7 +3,6 @@ require_once("common.php");
 
 header("Access-Control-Allow-Origin: *");
 
-// AJAX UPLOAD WALK DATA
 //THIS WORKS ON DEV!
 if(isset($_POST["doc"]) && isset($_POST["doc_id"])){
 	$_id = filter_var($_POST["doc_id"], FILTER_SANITIZE_STRING);
@@ -35,7 +34,7 @@ if(isset($_POST["doc"]) && isset($_POST["doc_id"])){
             print_r(json_encode($nice_return));
         }else{
             //what to do if it fails?
-            //nothing i guess
+            //nothing, I guess
         }
         fclose($fp);
     }
@@ -44,7 +43,8 @@ if(isset($_POST["doc"]) && isset($_POST["doc_id"])){
 
 // AJAX UPLOAD ATTACHMENTS
 if( isset($_REQUEST["walk_id"]) ){
-    $walk_id        = filter_var($_REQUEST["walk_id"], FILTER_SANITIZE_STRING);
+    // $walk_id        = filter_var($_REQUEST["walk_id"], FILTER_SANITIZE_STRING);
+    $walk_id        = htmlspecialchars($_REQUEST["walk_id"], ENT_QUOTES);
     $local_folder   = "temp/$walk_id/";
 
     require('UploadHandler.php');
